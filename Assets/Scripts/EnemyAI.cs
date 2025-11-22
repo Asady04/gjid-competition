@@ -1,4 +1,6 @@
+using System;
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 [RequireComponent(typeof(Rigidbody2D))]
@@ -8,29 +10,42 @@ public class EnemyAI : MonoBehaviour
 
     [Header("Behavior")]
     public PatrolMode patrolMode = PatrolMode.Idle;
-    public float patrolDistance = 3f; // half distance from start to endpoint
-    public float patrolSpeed = 2f;    // movement speed while patrolling
-    public float patrolPause = 0.2f;  // small pause at endpoints
+    public float patrolDistance = 3f;
+    public float patrolSpeed = 2f;
+    public float patrolPause = 0.2f;
 
     [Header("Detection")]
     public float detectionRadius = 6f;
-    public LayerMask playerLayer;
-    public LayerMask obstacleLayer; // used for LOS check
+    public LayerMask playerLayer;   // prefer Tag="Player", but use layer for fallback
+    public LayerMask obstacleLayer; // used for LOS
+
+    [Header("Companion / Requirement")]
+    [Tooltip("If true, enemy will only become 'aware' and shoot when the player has a companion near them.")]
+    public bool requireCompanion = true;             // enforce companion requirement
+    [Tooltip("Distance around the player to consider a companion 'with' the player")]
+    public float companionRadius = 1.5f;
+
+    [Tooltip("If true, will also consider objects with the specified companionTagName as companions (tag fallback).")]
+    public bool companionTagFallback = false; // recommended: false for strict behavior
+    [Tooltip("Tag name used as fallback for companions (e.g., 'Companion' or 'NPC').")]
+    public string companionTagName = "Companion";
 
     [Header("Shooting")]
     public GameObject bulletPrefab;
-    public Transform muzzle; // where bullet spawns
+    public Transform muzzle;
     public float bulletSpeed = 10f;
-    public float fireCooldown = 1.5f; // time between shots after aware
-    public float awareDelay = 0.8f;    // "aware" delay before the first shot
-
-    [Header("Misc")]
-    public float targetPredictAhead = 0f; // optional lead for moving target
+    public float fireCooldown = 1.5f;
+    public float awareDelay = 0.8f;
+    public float targetPredictAhead = 0f;
 
     [Header("Sprite / Flip")]
-    public Transform spriteTransform; // assign enemy sprite child here (optional)
-    public bool originalFacesLeft = true; // true = sprite artwork faces left by default
-    public float flipThreshold = 0.01f; // min horizontal speed to flip
+    public Transform spriteRoot;
+    public bool originalFacesLeft = true;
+    public float flipSmoothSpeed = 720f;
+
+    [Header("Animator (optional)")]
+    [Tooltip("Animator with parameters: 'Idle' (bool), 'Horizontal' (float), 'Vertical' (float).")]
+    public Animator animator;
 
     // internal state
     bool isAware = false;
@@ -42,45 +57,43 @@ public class EnemyAI : MonoBehaviour
     Rigidbody2D rb;
     Vector3 startPosition;
     float patrolTimer = 0f;
-    int patrolDir = 1; // 1 or -1
+    int patrolDir = 1;
 
-    // position tracking for fallback velocity
-    Vector3 lastPosition;
+    Coroutine awareCoroutine = null; // reference to aware coroutine so we can stop only it
 
     void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
         startPosition = transform.position;
-        lastPosition = transform.position;
+
+        if (spriteRoot == null)
+            Debug.LogWarning($"{name}: spriteRoot not assigned. Assign a child transform for visuals so flip works properly.");
+        if (muzzle == null)
+            Debug.LogWarning($"{name}: muzzle not assigned.");
+
+        if (animator == null)
+            animator = GetComponentInChildren<Animator>();
     }
 
     void OnEnable()
     {
-        // reset patrol state
         patrolDir = 1;
         patrolTimer = 0f;
     }
 
     void Update()
     {
-        // Detection & Shooting handled in Update (non-physics)
         HandleDetectionAndShooting();
+        HandleSmoothFlip();
 
-        // flip based on movement (velocity or displacement)
-        HandleFlip();
-
-        // remember last position for next frame
-        lastPosition = transform.position;
+        if (isAware)
+            UpdateAnimator(Vector2.zero);
     }
 
     void FixedUpdate()
     {
-        // Handle patrol movement in FixedUpdate for physics
         if (!isAware)
-        {
             HandlePatrolMovement();
-        }
-        // When aware, we keep position steady (or you can add chase logic)
     }
 
     // ---------------------------
@@ -88,29 +101,29 @@ public class EnemyAI : MonoBehaviour
     // ---------------------------
     void HandlePatrolMovement()
     {
-        if (patrolMode == PatrolMode.Idle) return;
+        if (patrolMode == PatrolMode.Idle)
+        {
+            UpdateAnimator(Vector2.zero);
+            return;
+        }
 
         Vector2 moveDelta = Vector2.zero;
 
         if (patrolMode == PatrolMode.PatrolHorizontal)
         {
-            // move along X between startPosition.x - patrolDistance and + patrolDistance
             float left = startPosition.x - patrolDistance;
             float right = startPosition.x + patrolDistance;
-
-            // compute current target using ping-pong or manual flipping
             float nextX = transform.position.x + patrolDir * patrolSpeed * Time.fixedDeltaTime;
 
-            // if will go out of bounds, clamp and reverse after a pause
             if (nextX < left)
             {
                 nextX = left;
-                StartCoroutine(PatrolEndpointPause(-1));
+                StartCoroutine(PatrolEndpointPause());
             }
             else if (nextX > right)
             {
                 nextX = right;
-                StartCoroutine(PatrolEndpointPause(-1));
+                StartCoroutine(PatrolEndpointPause());
             }
 
             moveDelta = new Vector2(nextX - rb.position.x, 0f);
@@ -119,42 +132,34 @@ public class EnemyAI : MonoBehaviour
         {
             float bottom = startPosition.y - patrolDistance;
             float top = startPosition.y + patrolDistance;
-
             float nextY = transform.position.y + patrolDir * patrolSpeed * Time.fixedDeltaTime;
 
             if (nextY < bottom)
             {
                 nextY = bottom;
-                StartCoroutine(PatrolEndpointPause(-1));
+                StartCoroutine(PatrolEndpointPause());
             }
             else if (nextY > top)
             {
                 nextY = top;
-                StartCoroutine(PatrolEndpointPause(-1));
+                StartCoroutine(PatrolEndpointPause());
             }
 
             moveDelta = new Vector2(0f, nextY - rb.position.y);
         }
 
-        // apply movement using Rigidbody if available
+        Vector2 velocity = moveDelta / Time.fixedDeltaTime;
         if (rb != null)
-        {
-            Vector2 targetPos = rb.position + moveDelta;
-            rb.MovePosition(targetPos);
-        }
+            rb.MovePosition(rb.position + moveDelta);
         else
-        {
-            // fallback: transform movement
             transform.position += (Vector3)moveDelta;
-        }
+
+        UpdateAnimator(velocity);
     }
 
-    IEnumerator PatrolEndpointPause(int flipDir)
+    IEnumerator PatrolEndpointPause()
     {
-        // Prevent multiple coroutines from stacking
         if (patrolTimer > 0f) yield break;
-
-        // pause then flip direction
         patrolTimer = patrolPause;
         yield return new WaitForSeconds(patrolPause);
         patrolDir *= -1;
@@ -162,85 +167,148 @@ public class EnemyAI : MonoBehaviour
     }
 
     // ---------------------------
-    // Detection & Shooting (kept from your version)
+    // Detection & Shooting
     // ---------------------------
     void HandleDetectionAndShooting()
     {
-        // find player if not set (cheap, assumes single player)
-        if (player == null)
+        // find candidate player(s) inside detection radius
+        Collider2D[] candidates = Physics2D.OverlapCircleAll(transform.position, detectionRadius, playerLayer);
+
+        Transform foundPlayer = null;
+        float bestDist = float.MaxValue;
+
+        // Prefer tag "Player"
+        foreach (var c in candidates)
         {
-            Collider2D p = Physics2D.OverlapCircle(transform.position, detectionRadius, playerLayer);
-            if (p != null) player = p.transform;
+            if (c == null) continue;
+            if (c.CompareTag("Player"))
+            {
+                float d = Vector2.SqrMagnitude(c.transform.position - transform.position);
+                if (d < bestDist)
+                {
+                    bestDist = d;
+                    foundPlayer = c.transform;
+                }
+            }
         }
-        else
+
+        // Fallback: nearest collider in mask
+        if (foundPlayer == null && candidates.Length > 0)
         {
-            float dist = Vector2.Distance(transform.position, player.position);
-
-            // still in range?
-            if (dist <= detectionRadius)
+            foreach (var c in candidates)
             {
-                // check line of sight: raycast from muzzle (or enemy) towards player, see if obstacle in between
-                Vector2 origin = (muzzle != null) ? (Vector2)muzzle.position : (Vector2)transform.position;
-                Vector2 dir = ((Vector2)player.position - origin).normalized;
-                float maxDist = detectionRadius;
-
-                RaycastHit2D hit = Physics2D.Raycast(origin, dir, maxDist, obstacleLayer | playerLayer);
-
-                if (hit.collider != null && ((1 << hit.collider.gameObject.layer) & playerLayer) != 0)
+                if (c == null) continue;
+                float d = Vector2.SqrMagnitude(c.transform.position - transform.position);
+                if (d < bestDist)
                 {
-                    // player is visible (first hit is player)
-                    if (!isAware)
-                    {
-                        // go into aware state (this will pause patrol because isAware = true)
-                        StartCoroutine(EnterAwareAndFire());
-                    }
-                }
-                else
-                {
-                    // obstacle blocks view or no hit -> break awareness if was aware
-                    if (isAware) StopAware();
+                    bestDist = d;
+                    foundPlayer = c.transform;
                 }
             }
-            else
+        }
+
+        if (foundPlayer == null)
+        {
+            if (isAware) StopAware();
+            player = null;
+            return;
+        }
+
+        player = foundPlayer;
+
+        // distance safety
+        float dist = Vector2.Distance(transform.position, player.position);
+        if (dist > detectionRadius)
+        {
+            if (isAware) StopAware();
+            player = null;
+            return;
+        }
+
+        // line of sight
+        Vector2 origin = muzzle != null ? (Vector2)muzzle.position : (Vector2)transform.position;
+        Vector2 dir = ((Vector2)player.position - origin).normalized;
+        float maxDist = detectionRadius;
+        RaycastHit2D hit = Physics2D.Raycast(origin, dir, maxDist, obstacleLayer | playerLayer);
+
+        if (hit.collider == null)
+        {
+            if (isAware) StopAware();
+            return;
+        }
+
+        bool rayHitPlayer = (hit.transform == player) || hit.transform.CompareTag("Player");
+        if (!rayHitPlayer)
+        {
+            if (isAware) StopAware();
+            return;
+        }
+
+        // companion requirement: STRICT check (requires NPCFollower.isFollowing + proximity)
+        if (requireCompanion)
+        {
+            bool hasCompanion = PlayerHasCompanionStrict(player);
+            if (!hasCompanion)
             {
-                // out of range: reset
                 if (isAware) StopAware();
-                player = null; // optionally forget player so it can be reacquired
+                return;
             }
+        }
+
+        // all checks passed — start aware/shoot if not already
+        if (!isAware)
+        {
+            StopAware(); // ensure stale coroutine removed
+            awareCoroutine = StartCoroutine(EnterAwareAndFire());
         }
     }
 
     IEnumerator EnterAwareAndFire()
     {
         isAware = true;
-
-        // Aware delay: show animation/sound here if you like
         yield return new WaitForSeconds(awareDelay);
 
-        // After aware delay, fire and then enter cooldown loop while still aware and player visible
         while (isAware)
         {
-            if (canShoot && player != null)
+            if (player == null)
             {
-                // check LOS again quickly
-                Vector2 origin = (muzzle != null) ? (Vector2)muzzle.position : (Vector2)transform.position;
-                Vector2 toPlayer = (Vector2)player.position - origin;
-                RaycastHit2D hit = Physics2D.Raycast(origin, toPlayer.normalized, Mathf.Min(detectionRadius, toPlayer.magnitude), obstacleLayer | playerLayer);
+                Debug.Log($"{name}: player lost during aware loop -> stopping aware.");
+                StopAware();
+                yield break;
+            }
 
-                if (hit.collider != null && ((1 << hit.collider.gameObject.layer) & playerLayer) != 0)
+            // re-evaluate LOS and companion status each tick
+            Vector2 origin = muzzle != null ? (Vector2)muzzle.position : (Vector2)transform.position;
+            Vector2 toPlayer = (Vector2)player.position - origin;
+            RaycastHit2D hit = Physics2D.Raycast(origin, toPlayer.normalized, Mathf.Min(detectionRadius, toPlayer.magnitude), obstacleLayer | playerLayer);
+
+            bool hitPlayerNow = (hit.collider != null && (hit.transform == player || hit.transform.CompareTag("Player")));
+            bool hasCompanionNow = !requireCompanion ? true : PlayerHasCompanionStrict(player);
+
+            Debug.Log($"{name}: AwareLoop -> hitPlayerNow={hitPlayerNow}, hasCompanionNow={hasCompanionNow}");
+
+            if (!hitPlayerNow || !hasCompanionNow)
+            {
+                Debug.Log($"{name}: Conditions failed during aware loop -> stopping aware.");
+                StopAware();
+                yield break;
+            }
+
+            if (canShoot)
+            {
+                // final defensive guard just before firing (ensures companion still true)
+                if (requireCompanion && player != null && !PlayerHasCompanionStrict(player))
                 {
-                    FireAt(player.position);
-                    StartCoroutine(ShootCooldown());
+                    Debug.Log($"{name}: Fire prevented — companion check failed at moment of firing.");
                 }
                 else
                 {
-                    // player blocked; break awareness
-                    StopAware();
-                    yield break;
+                    Debug.Log($"{name}: Firing at player '{player.name}' — requireCompanion={requireCompanion}, hasCompanionNow={PlayerHasCompanionStrict(player)}");
+                    FireAt(player.position);
+                    StartCoroutine(ShootCooldown());
                 }
             }
 
-            // keep checking every frame until cooldown finishes or lost sight
             yield return null;
         }
     }
@@ -248,8 +316,12 @@ public class EnemyAI : MonoBehaviour
     void StopAware()
     {
         isAware = false;
-        StopAllCoroutines(); // simple approach: stops EnterAwareAndFire coroutine too
-        StartCoroutine(ResetCanShoot()); // ensure canShoot resets eventually
+        if (awareCoroutine != null)
+        {
+            try { StopCoroutine(awareCoroutine); } catch { }
+            awareCoroutine = null;
+        }
+        StartCoroutine(ResetCanShoot());
     }
 
     void FireAt(Vector2 targetPos)
@@ -259,8 +331,7 @@ public class EnemyAI : MonoBehaviour
         Vector2 origin = muzzle.position;
         Vector2 dir = (targetPos - origin).normalized;
 
-        // optional leading: target predictable movement (simple)
-        if (targetPredictAhead != 0f)
+        if (targetPredictAhead != 0f && player != null)
         {
             Rigidbody2D prb = player.GetComponent<Rigidbody2D>();
             if (prb != null)
@@ -271,11 +342,21 @@ public class EnemyAI : MonoBehaviour
         }
 
         GameObject b = Instantiate(bulletPrefab, origin, Quaternion.FromToRotation(Vector3.right, dir));
+
+        // ignore immediate collision with spawner
+        Collider2D enemyCol = GetComponent<Collider2D>();
+        Collider2D bulletCol = b.GetComponent<Collider2D>() ?? b.GetComponentInChildren<Collider2D>();
+        if (bulletCol != null && enemyCol != null)
+        {
+            Physics2D.IgnoreCollision(bulletCol, enemyCol, true);
+        }
+
         Rigidbody2D brb = b.GetComponent<Rigidbody2D>();
         if (brb != null)
         {
             brb.velocity = dir * bulletSpeed;
             brb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+            brb.gravityScale = 0f;
         }
     }
 
@@ -293,71 +374,124 @@ public class EnemyAI : MonoBehaviour
     }
 
     // ---------------------------
-    // Flip logic (only based on horizontal movement)
+    // Flip logic
     // ---------------------------
-    void HandleFlip()
+    void HandleSmoothFlip()
     {
-        if (spriteTransform == null) return;
+        if (spriteRoot == null) return;
 
-        // Only flip when patrolling horizontally
-        if (patrolMode != PatrolMode.PatrolHorizontal) return;
-        if (isAware) return; // optional: do not flip when aware/shooting
+        bool? desiredFaceRight = null;
 
-        Vector2 move = Vector2.zero;
-
-        if (rb != null)
+        if (isAware && player != null)
         {
-            move = rb.velocity;
-        }
-        else
-        {
-            Vector3 delta = transform.position - lastPosition;
-            float dt = Mathf.Max(Time.deltaTime, 1e-6f);
-            move = new Vector2(delta.x / dt, delta.y / dt);
+            Vector2 origin = muzzle != null ? (Vector2)muzzle.position : (Vector2)transform.position;
+            Vector2 toPlayer = (Vector2)player.position - origin;
+            if (Mathf.Abs(toPlayer.x) > 0.001f) desiredFaceRight = toPlayer.x > 0f;
         }
 
-        // Flip only if moving significantly left/right
-        if (move.x > flipThreshold)
+        if (desiredFaceRight == null && patrolMode == PatrolMode.PatrolHorizontal)
+            desiredFaceRight = patrolDir > 0;
+
+        if (desiredFaceRight == null) return;
+
+        float targetY = originalFacesLeft ? (desiredFaceRight.Value ? 180f : 0f)
+                                          : (desiredFaceRight.Value ? 0f : 180f);
+
+        Vector3 curEuler = spriteRoot.localEulerAngles;
+        float curY = curEuler.y;
+        float newY = Mathf.MoveTowardsAngle(curY, targetY, flipSmoothSpeed * Time.deltaTime);
+        spriteRoot.localEulerAngles = new Vector3(curEuler.x, newY, curEuler.z);
+
+        if (muzzle != null && muzzle.parent != spriteRoot)
         {
-            float sx = originalFacesLeft ? -1f : 1f;
-            spriteTransform.localScale = new Vector3(sx, Mathf.Abs(spriteTransform.localScale.y), Mathf.Abs(spriteTransform.localScale.z));
-        }
-        else if (move.x < -flipThreshold)
-        {
-            float sx = originalFacesLeft ? 1f : -1f;
-            spriteTransform.localScale = new Vector3(sx, Mathf.Abs(spriteTransform.localScale.y), Mathf.Abs(spriteTransform.localScale.z));
+            Vector3 mscale = muzzle.localScale;
+            bool faceRight = desiredFaceRight.Value;
+            float sign = (originalFacesLeft ? (faceRight ? -1f : 1f) : (faceRight ? 1f : -1f));
+            muzzle.localScale = new Vector3(Mathf.Sign(sign) * Mathf.Abs(mscale.x), mscale.y, mscale.z);
+
+            Vector3 mpos = muzzle.localPosition;
+            mpos.x = Mathf.Abs(mpos.x) * (faceRight ? 1f : -1f);
+            muzzle.localPosition = mpos;
         }
     }
 
-    // draw detection gizmo and patrol bounds
+    // ---------------------------
+    // Companion detection (STRICT)
+    // ---------------------------
+    bool PlayerHasCompanionStrict(Transform playerTransform)
+    {
+        if (!requireCompanion) return true;
+        if (playerTransform == null) return false;
+
+        // Require global follow toggled on; if it's off, no one is following.
+        if (!NPCFollower.IsGlobalFollowing())
+        {
+            Debug.Log($"{name}: Global follow is OFF -> player considered alone.");
+            return false;
+        }
+
+        float sqrR = companionRadius * companionRadius;
+
+        // Only accept NPCFollower instances that explicitly report following and are within radius
+        foreach (var fol in NPCFollower.All)
+        {
+            if (fol == null) continue;
+            if (!fol.gameObject.activeInHierarchy) continue;
+            if (!fol.isFollowing) continue; // must be explicitly following
+            if (fol.transform == playerTransform) continue;
+
+            float d2 = (fol.transform.position - playerTransform.position).sqrMagnitude;
+            Debug.Log($"{name}: follower '{fol.gameObject.name}' dist={(Mathf.Sqrt(d2)):F2} isFollowing={fol.isFollowing}");
+            if (d2 <= sqrR)
+            {
+                Debug.Log($"{name}: Companion found -> '{fol.gameObject.name}' dist={(Mathf.Sqrt(d2)):F2}");
+                return true;
+            }
+        }
+
+        // Fallbacks are intentionally disabled by default; enable only if necessary.
+        if (companionTagFallback)
+        {
+            Collider2D[] nearby = Physics2D.OverlapCircleAll(playerTransform.position, companionRadius);
+            foreach (var c in nearby)
+            {
+                if (c == null) continue;
+                if (c.transform == playerTransform) continue;
+                if (c.CompareTag(companionTagName))
+                {
+                    Debug.Log($"{name}: Companion detected via tag fallback -> {c.name}");
+                    return true;
+                }
+            }
+        }
+
+        Debug.Log($"{name}: No active following companion found -> player considered ALONE (will NOT be targeted).");
+        return false;
+    }
+
+    // Helper: update animator parameters
+    void UpdateAnimator(Vector2 velocity)
+    {
+        if (animator == null) return;
+
+        bool idle = velocity.sqrMagnitude < 0.001f;
+        animator.SetBool("Idle", idle);
+        animator.SetFloat("Horizontal", velocity.x);
+        animator.SetFloat("Vertical", velocity.y);
+    }
+
+    // draw gizmos for debugging
     void OnDrawGizmosSelected()
     {
         Gizmos.color = Color.yellow;
         Gizmos.DrawWireSphere(transform.position, detectionRadius);
 
-        // show patrol extents
-        if (patrolMode != PatrolMode.Idle)
+#if UNITY_EDITOR
+        if (requireCompanion && player != null)
         {
-            Gizmos.color = Color.cyan;
-            Vector3 origin = Application.isPlaying ? startPosition : transform.position;
-            if (patrolMode == PatrolMode.PatrolHorizontal)
-            {
-                Gizmos.DrawLine(origin + Vector3.left * patrolDistance, origin + Vector3.right * patrolDistance);
-                Gizmos.DrawSphere(origin + Vector3.left * patrolDistance, 0.05f);
-                Gizmos.DrawSphere(origin + Vector3.right * patrolDistance, 0.05f);
-            }
-            else
-            {
-                Gizmos.DrawLine(origin + Vector3.down * patrolDistance, origin + Vector3.up * patrolDistance);
-                Gizmos.DrawSphere(origin + Vector3.down * patrolDistance, 0.05f);
-                Gizmos.DrawSphere(origin + Vector3.up * patrolDistance, 0.05f);
-            }
+            Gizmos.color = Color.magenta;
+            Gizmos.DrawWireSphere(player.position, companionRadius);
         }
-
-        if (muzzle != null)
-        {
-            Gizmos.color = Color.red;
-            Gizmos.DrawSphere(muzzle.position, 0.05f);
-        }
+#endif
     }
 }
