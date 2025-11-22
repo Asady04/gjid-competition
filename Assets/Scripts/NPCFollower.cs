@@ -21,6 +21,11 @@ public class NPCFollower : MonoBehaviour
     public bool ignorePlayerCollisionAtStart = true;
     public bool makeColliderTrigger = false;
 
+    // NEW: per-instance following flag
+    [Header("Following")]
+    [Tooltip("True when this NPC is currently following the player.")]
+    public bool isFollowing = false;
+
     Rigidbody2D rb;
     PlayerPathRecorder recorder; // ensure this class exposes TryGetPositionAtDistanceBack and (optionally) GetTotalRecordedDistance
     Vector2 velocityRef = Vector2.zero;
@@ -32,6 +37,15 @@ public class NPCFollower : MonoBehaviour
     public static void ToggleGlobalFollow(bool newState)
     {
         globalFollow = newState;
+
+        // Update per-instance flag for all known followers
+        foreach (var fol in All)
+        {
+            if (fol != null)
+            {
+                fol.isFollowing = newState;
+            }
+        }
     }
     public static bool IsGlobalFollowing() => globalFollow;
 
@@ -91,8 +105,9 @@ public class NPCFollower : MonoBehaviour
 
     void FixedUpdate()
     {
-        // Respect global follow toggle
+        // Respect global follow toggle and per-instance isFollowing
         if (!globalFollow) return;
+        if (!isFollowing) return;
 
         if (recorder == null) return;
 
