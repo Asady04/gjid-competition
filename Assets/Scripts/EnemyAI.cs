@@ -4,215 +4,360 @@ using UnityEngine;
 [RequireComponent(typeof(Rigidbody2D))]
 public class EnemyAI : MonoBehaviour
 {
-    public enum EnemyType { Idle, PatrolHorizontal, PatrolVertical }
+    public enum PatrolMode { Idle, PatrolHorizontal, PatrolVertical }
 
-    [Header("General")]
-    public EnemyType type = EnemyType.Idle;
-    public float speed = 1.2f;
-    public float chaseSpeed = 2.5f;
-    public float arriveDistance = 0.1f;
+    [Header("Behavior")]
+    public PatrolMode patrolMode = PatrolMode.Idle;
+    public float patrolDistance = 3f; // half distance from start to endpoint
+    public float patrolSpeed = 2f;    // movement speed while patrolling
+    public float patrolPause = 0.2f;  // small pause at endpoints
 
     [Header("Detection")]
-    // NOTE: this version focuses on detecting followers; when a follower is seen, the enemy will chase the PLAYER.
-    public string detectFollowerTag = "NPC"; // tag for follower NPCs
-    public string playerTag = "Player";
-    public LayerMask detectionMask; // optional
-    public float detectionRadius = 3.0f;
-    [Range(0f, 180f)] public float detectionHalfAngle = 60f;
-    public float timeToLoseTarget = 0.8f; // seconds to wait before returning to patrol/idle when losing sight
+    public float detectionRadius = 6f;
+    public LayerMask playerLayer;
+    public LayerMask obstacleLayer; // used for LOS check
 
-    [Header("Patrol")]
-    public float patrolDistance = 3f; // how far from start position to patrol
-    public bool startFacingRight = true;
+    [Header("Shooting")]
+    public GameObject bulletPrefab;
+    public Transform muzzle; // where bullet spawns
+    public float bulletSpeed = 10f;
+    public float fireCooldown = 1.5f; // time between shots after aware
+    public float awareDelay = 0.8f;    // "aware" delay before the first shot
 
-    [Header("Gizmos")]
-    public bool drawGizmos = true;
-    public Color gizmoColor = Color.red;
+    [Header("Misc")]
+    public float targetPredictAhead = 0f; // optional lead for moving target
 
+    [Header("Sprite / Flip")]
+    public Transform spriteTransform; // assign enemy sprite child here (optional)
+    public bool originalFacesLeft = true; // true = sprite artwork faces left by default
+    public float flipThreshold = 0.01f; // min horizontal speed to flip
+
+    // internal state
+    bool isAware = false;
+    bool canShoot = true;
+
+    Transform player;
+
+    // movement & patrol
     Rigidbody2D rb;
-    Vector2 startPos;
-    Vector2 patrolDir;
-    int patrolSign = 1;
-    Transform currentTarget;      // the transform currently being chased (in this version it's the PLAYER when triggered)
-    float lostTargetTimer = 0f;
-    bool facingRight;
+    Vector3 startPosition;
+    float patrolTimer = 0f;
+    int patrolDir = 1; // 1 or -1
+
+    // position tracking for fallback velocity
+    Vector3 lastPosition;
 
     void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
-        rb.bodyType = RigidbodyType2D.Kinematic;
-        startPos = transform.position;
-        facingRight = startFacingRight;
-        patrolDir = (type == EnemyType.PatrolVertical) ? Vector2.up : Vector2.right;
-        if (!startFacingRight) patrolSign = -1;
+        startPosition = transform.position;
+        lastPosition = transform.position;
+    }
+
+    void OnEnable()
+    {
+        // reset patrol state
+        patrolDir = 1;
+        patrolTimer = 0f;
+    }
+
+    void Update()
+    {
+        // Detection & Shooting handled in Update (non-physics)
+        HandleDetectionAndShooting();
+
+        // flip based on movement (velocity or displacement)
+        HandleFlip();
+
+        // remember last position for next frame
+        lastPosition = transform.position;
     }
 
     void FixedUpdate()
     {
-        // 1) Look for a follower in front; if found -> set target to the player and chase the player
-        Transform seenFollower = DetectFollowerInFront();
-        if (seenFollower != null)
+        // Handle patrol movement in FixedUpdate for physics
+        if (!isAware)
         {
-            var playerObj = GameObject.FindGameObjectWithTag(playerTag);
-            if (playerObj != null)
+            HandlePatrolMovement();
+        }
+        // When aware, we keep position steady (or you can add chase logic)
+    }
+
+    // ---------------------------
+    // Patrol Movement
+    // ---------------------------
+    void HandlePatrolMovement()
+    {
+        if (patrolMode == PatrolMode.Idle) return;
+
+        Vector2 moveDelta = Vector2.zero;
+
+        if (patrolMode == PatrolMode.PatrolHorizontal)
+        {
+            // move along X between startPosition.x - patrolDistance and + patrolDistance
+            float left = startPosition.x - patrolDistance;
+            float right = startPosition.x + patrolDistance;
+
+            // compute current target using ping-pong or manual flipping
+            float nextX = transform.position.x + patrolDir * patrolSpeed * Time.fixedDeltaTime;
+
+            // if will go out of bounds, clamp and reverse after a pause
+            if (nextX < left)
             {
-                currentTarget = playerObj.transform;
-                lostTargetTimer = 0f;
-                ChaseTarget();
-                return;
+                nextX = left;
+                StartCoroutine(PatrolEndpointPause(-1));
             }
+            else if (nextX > right)
+            {
+                nextX = right;
+                StartCoroutine(PatrolEndpointPause(-1));
+            }
+
+            moveDelta = new Vector2(nextX - rb.position.x, 0f);
+        }
+        else if (patrolMode == PatrolMode.PatrolVertical)
+        {
+            float bottom = startPosition.y - patrolDistance;
+            float top = startPosition.y + patrolDistance;
+
+            float nextY = transform.position.y + patrolDir * patrolSpeed * Time.fixedDeltaTime;
+
+            if (nextY < bottom)
+            {
+                nextY = bottom;
+                StartCoroutine(PatrolEndpointPause(-1));
+            }
+            else if (nextY > top)
+            {
+                nextY = top;
+                StartCoroutine(PatrolEndpointPause(-1));
+            }
+
+            moveDelta = new Vector2(0f, nextY - rb.position.y);
         }
 
-        // 2) If we previously had a target (player) keep chasing for a moment (grace time)
-        if (currentTarget != null)
+        // apply movement using Rigidbody if available
+        if (rb != null)
         {
-            lostTargetTimer += Time.fixedDeltaTime;
-            if (lostTargetTimer < timeToLoseTarget)
+            Vector2 targetPos = rb.position + moveDelta;
+            rb.MovePosition(targetPos);
+        }
+        else
+        {
+            // fallback: transform movement
+            transform.position += (Vector3)moveDelta;
+        }
+    }
+
+    IEnumerator PatrolEndpointPause(int flipDir)
+    {
+        // Prevent multiple coroutines from stacking
+        if (patrolTimer > 0f) yield break;
+
+        // pause then flip direction
+        patrolTimer = patrolPause;
+        yield return new WaitForSeconds(patrolPause);
+        patrolDir *= -1;
+        patrolTimer = 0f;
+    }
+
+    // ---------------------------
+    // Detection & Shooting (kept from your version)
+    // ---------------------------
+    void HandleDetectionAndShooting()
+    {
+        // find player if not set (cheap, assumes single player)
+        if (player == null)
+        {
+            Collider2D p = Physics2D.OverlapCircle(transform.position, detectionRadius, playerLayer);
+            if (p != null) player = p.transform;
+        }
+        else
+        {
+            float dist = Vector2.Distance(transform.position, player.position);
+
+            // still in range?
+            if (dist <= detectionRadius)
             {
-                ChaseTarget();
-                return;
+                // check line of sight: raycast from muzzle (or enemy) towards player, see if obstacle in between
+                Vector2 origin = (muzzle != null) ? (Vector2)muzzle.position : (Vector2)transform.position;
+                Vector2 dir = ((Vector2)player.position - origin).normalized;
+                float maxDist = detectionRadius;
+
+                RaycastHit2D hit = Physics2D.Raycast(origin, dir, maxDist, obstacleLayer | playerLayer);
+
+                if (hit.collider != null && ((1 << hit.collider.gameObject.layer) & playerLayer) != 0)
+                {
+                    // player is visible (first hit is player)
+                    if (!isAware)
+                    {
+                        // go into aware state (this will pause patrol because isAware = true)
+                        StartCoroutine(EnterAwareAndFire());
+                    }
+                }
+                else
+                {
+                    // obstacle blocks view or no hit -> break awareness if was aware
+                    if (isAware) StopAware();
+                }
             }
             else
             {
-                // lost player for good -> clear target and resume patrol/idle
-                currentTarget = null;
+                // out of range: reset
+                if (isAware) StopAware();
+                player = null; // optionally forget player so it can be reacquired
+            }
+        }
+    }
+
+    IEnumerator EnterAwareAndFire()
+    {
+        isAware = true;
+
+        // Aware delay: show animation/sound here if you like
+        yield return new WaitForSeconds(awareDelay);
+
+        // After aware delay, fire and then enter cooldown loop while still aware and player visible
+        while (isAware)
+        {
+            if (canShoot && player != null)
+            {
+                // check LOS again quickly
+                Vector2 origin = (muzzle != null) ? (Vector2)muzzle.position : (Vector2)transform.position;
+                Vector2 toPlayer = (Vector2)player.position - origin;
+                RaycastHit2D hit = Physics2D.Raycast(origin, toPlayer.normalized, Mathf.Min(detectionRadius, toPlayer.magnitude), obstacleLayer | playerLayer);
+
+                if (hit.collider != null && ((1 << hit.collider.gameObject.layer) & playerLayer) != 0)
+                {
+                    FireAt(player.position);
+                    StartCoroutine(ShootCooldown());
+                }
+                else
+                {
+                    // player blocked; break awareness
+                    StopAware();
+                    yield break;
+                }
+            }
+
+            // keep checking every frame until cooldown finishes or lost sight
+            yield return null;
+        }
+    }
+
+    void StopAware()
+    {
+        isAware = false;
+        StopAllCoroutines(); // simple approach: stops EnterAwareAndFire coroutine too
+        StartCoroutine(ResetCanShoot()); // ensure canShoot resets eventually
+    }
+
+    void FireAt(Vector2 targetPos)
+    {
+        if (bulletPrefab == null || muzzle == null) return;
+
+        Vector2 origin = muzzle.position;
+        Vector2 dir = (targetPos - origin).normalized;
+
+        // optional leading: target predictable movement (simple)
+        if (targetPredictAhead != 0f)
+        {
+            Rigidbody2D prb = player.GetComponent<Rigidbody2D>();
+            if (prb != null)
+            {
+                Vector2 lead = prb.velocity * targetPredictAhead;
+                dir = ((Vector2)player.position + lead - origin).normalized;
             }
         }
 
-        // 3) default behaviour when no followers seen and no recent player target
-        if (type == EnemyType.Idle)
+        GameObject b = Instantiate(bulletPrefab, origin, Quaternion.FromToRotation(Vector3.right, dir));
+        Rigidbody2D brb = b.GetComponent<Rigidbody2D>();
+        if (brb != null)
         {
-            rb.MovePosition(rb.position);
+            brb.velocity = dir * bulletSpeed;
+            brb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+        }
+    }
+
+    IEnumerator ShootCooldown()
+    {
+        canShoot = false;
+        yield return new WaitForSeconds(fireCooldown);
+        canShoot = true;
+    }
+
+    IEnumerator ResetCanShoot()
+    {
+        canShoot = true;
+        yield return null;
+    }
+
+    // ---------------------------
+    // Flip logic (only based on horizontal movement)
+    // ---------------------------
+    void HandleFlip()
+    {
+        if (spriteTransform == null) return;
+
+        // Only flip when patrolling horizontally
+        if (patrolMode != PatrolMode.PatrolHorizontal) return;
+        if (isAware) return; // optional: do not flip when aware/shooting
+
+        Vector2 move = Vector2.zero;
+
+        if (rb != null)
+        {
+            move = rb.velocity;
         }
         else
         {
-            PatrolMove();
+            Vector3 delta = transform.position - lastPosition;
+            float dt = Mathf.Max(Time.deltaTime, 1e-6f);
+            move = new Vector2(delta.x / dt, delta.y / dt);
+        }
+
+        // Flip only if moving significantly left/right
+        if (move.x > flipThreshold)
+        {
+            float sx = originalFacesLeft ? -1f : 1f;
+            spriteTransform.localScale = new Vector3(sx, Mathf.Abs(spriteTransform.localScale.y), Mathf.Abs(spriteTransform.localScale.z));
+        }
+        else if (move.x < -flipThreshold)
+        {
+            float sx = originalFacesLeft ? 1f : -1f;
+            spriteTransform.localScale = new Vector3(sx, Mathf.Abs(spriteTransform.localScale.y), Mathf.Abs(spriteTransform.localScale.z));
         }
     }
 
-    // Finds a follower (tagged detectFollowerTag) that lies inside the forward cone and is within detectionRadius.
-    Transform DetectFollowerInFront()
-    {
-        Collider2D[] hits = Physics2D.OverlapCircleAll(transform.position, detectionRadius, detectionMask == 0 ? ~0 : detectionMask);
-        Transform best = null;
-        float bestDist = float.MaxValue;
-
-        foreach (var c in hits)
-        {
-            if (c == null) continue;
-            if (!c.CompareTag(detectFollowerTag)) continue;
-
-            Vector2 dir = (c.transform.position - transform.position);
-            float dist = dir.magnitude;
-            if (dist <= 0.001f) continue;
-
-            // compute forward vector (use right as forward for horizontal enemies, up for vertical)
-            Vector2 forward = (type == EnemyType.PatrolVertical) ? (facingRight ? transform.up : -transform.up) : (facingRight ? transform.right : -transform.right);
-
-            float angle = Vector2.Angle(forward, dir.normalized);
-            if (angle > detectionHalfAngle) continue;
-
-            // optional: simple LOS check; adjust mask if you want occluders
-            RaycastHit2D hit = Physics2D.Raycast(transform.position, dir.normalized, dist, detectionMask == 0 ? ~0 : detectionMask);
-            if (hit.collider != null && hit.collider != c)
-            {
-                // blocked by some collider — ignore this follower
-                continue;
-            }
-
-            if (dist < bestDist)
-            {
-                bestDist = dist;
-                best = c.transform;
-            }
-        }
-
-        return best;
-    }
-
-    void ChaseTarget()
-    {
-        if (currentTarget == null) return;
-        Vector2 pos = rb.position;
-        Vector2 targetPos = currentTarget.position;
-        Vector2 dir = (targetPos - pos);
-        float dist = dir.magnitude;
-        if (dist <= arriveDistance)
-        {
-            rb.MovePosition(pos);
-            return;
-        }
-
-        Vector2 vel = dir.normalized * chaseSpeed * Time.fixedDeltaTime;
-        rb.MovePosition(pos + vel);
-
-        // set facing
-        if (Mathf.Abs(vel.x) > 0.01f) facingRight = vel.x > 0;
-        if (Mathf.Abs(vel.y) > 0.01f && type == EnemyType.PatrolVertical) facingRight = vel.y > 0;
-        ApplyFlip();
-    }
-
-    void PatrolMove()
-    {
-        Vector2 goal = startPos + patrolDir * patrolDistance * patrolSign;
-        Vector2 pos = rb.position;
-        Vector2 dir = (goal - pos);
-        float dist = dir.magnitude;
-
-        if (dist <= 0.05f)
-        {
-            patrolSign *= -1;
-            return;
-        }
-
-        Vector2 vel = dir.normalized * speed * Time.fixedDeltaTime;
-        rb.MovePosition(pos + vel);
-
-        if (type == EnemyType.PatrolHorizontal)
-        {
-            if (Mathf.Abs(vel.x) > 0.01f) facingRight = vel.x > 0;
-        }
-        else
-        {
-            if (Mathf.Abs(vel.y) > 0.01f) facingRight = vel.y > 0;
-        }
-        ApplyFlip();
-    }
-
-    void ApplyFlip()
-    {
-        // flip sprite by scale.x if you use that method:
-        // Vector3 s = transform.localScale;
-        // s.x = facingRight ? Mathf.Abs(s.x) : -Mathf.Abs(s.x);
-        // transform.localScale = s;
-    }
-
+    // draw detection gizmo and patrol bounds
     void OnDrawGizmosSelected()
     {
-        if (!drawGizmos) return;
-        Gizmos.color = gizmoColor;
+        Gizmos.color = Color.yellow;
         Gizmos.DrawWireSphere(transform.position, detectionRadius);
 
-        Vector3 fwd = Application.isPlaying ? ((type == EnemyType.PatrolVertical) ? (facingRight ? transform.up : -transform.up) : (facingRight ? transform.right : -transform.right))
-                                           : transform.right;
-
-        float half = detectionHalfAngle;
-        Quaternion rot1 = Quaternion.AngleAxis(half, Vector3.forward);
-        Quaternion rot2 = Quaternion.AngleAxis(-half, Vector3.forward);
-        Vector3 v1 = rot1 * fwd;
-        Vector3 v2 = rot2 * fwd;
-
-        Gizmos.color = new Color(gizmoColor.r, gizmoColor.g, gizmoColor.b, 0.25f);
-        Gizmos.DrawLine(transform.position, transform.position + v1 * detectionRadius);
-        Gizmos.DrawLine(transform.position, transform.position + v2 * detectionRadius);
-
-        if (type != EnemyType.Idle)
+        // show patrol extents
+        if (patrolMode != PatrolMode.Idle)
         {
-            Vector2 p1 = (Vector2)transform.position + (type == EnemyType.PatrolVertical ? Vector2.up : Vector2.right) * patrolDistance;
-            Vector2 p2 = (Vector2)transform.position + (type == EnemyType.PatrolVertical ? Vector2.down : Vector2.left) * patrolDistance;
-            Gizmos.color = Color.yellow;
-            Gizmos.DrawWireSphere(p1, 0.1f);
-            Gizmos.DrawWireSphere(p2, 0.1f);
+            Gizmos.color = Color.cyan;
+            Vector3 origin = Application.isPlaying ? startPosition : transform.position;
+            if (patrolMode == PatrolMode.PatrolHorizontal)
+            {
+                Gizmos.DrawLine(origin + Vector3.left * patrolDistance, origin + Vector3.right * patrolDistance);
+                Gizmos.DrawSphere(origin + Vector3.left * patrolDistance, 0.05f);
+                Gizmos.DrawSphere(origin + Vector3.right * patrolDistance, 0.05f);
+            }
+            else
+            {
+                Gizmos.DrawLine(origin + Vector3.down * patrolDistance, origin + Vector3.up * patrolDistance);
+                Gizmos.DrawSphere(origin + Vector3.down * patrolDistance, 0.05f);
+                Gizmos.DrawSphere(origin + Vector3.up * patrolDistance, 0.05f);
+            }
+        }
+
+        if (muzzle != null)
+        {
+            Gizmos.color = Color.red;
+            Gizmos.DrawSphere(muzzle.position, 0.05f);
         }
     }
 }
