@@ -216,8 +216,8 @@ RectTransform:
   m_LocalScale: {x: 0, y: 0, z: 0}
   m_ConstrainProportionsScale: 0
   m_Children:
-  - {fileID: 1961794660}
   - {fileID: 1045860456}
+  - {fileID: 1961794660}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -536,8 +536,8 @@ MonoBehaviour:
     Name\r\n\r\nLEAD PROGRAMMER\r\nYour Programmer Name\r\n\r\nART DIRECTOR\r\nYour
     Artist Name\r\n\r\nCHARACTER DESIGN\r\nName 1\r\nName 2\r\n\r\nSTORY WRITING\r\nName
     1\r\nName 2\r\n\r\nUI/UX DESIGNER\r\nName 1\r\n\r\nMUSIC & SOUND\r\nName 1\r\n\r\nSPECIAL
-    THANKS\r\nOur Friends & Family\r\nOur Supporters\r\nYou, The Player \u2764\r\n\r\nENGINE\r\nUnity
-    Engine\r\n\r\nCopyright \xA9 2025 Your Studio Name\r\nAll Rights Reserved\r\n"
+    THANKS\r\nOur Friends & Family\r\nOur Supporters\r\nYou, The Player \n\r\nENGINE\r\nUnity
+    Engine\r\n\r\nCopyright  2025 Your Studio Name\r\nAll Rights Reserved\r\n"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
