@@ -5,11 +5,13 @@ using UnityEngine;
 [RequireComponent(typeof(Rigidbody2D))]
 public class PlayerController : MonoBehaviour
 {
-    public float moveSpeed = 5f;            // Movement speed
-    public float rotationSpeed = 720f;      // Degrees per second
+    public float moveSpeed = 5f;
+    public float rotationSpeed = 720f;
 
     private Rigidbody2D rb;
     private Vector2 input;
+
+    public Transform spriteTransform;   // <-- assign your sprite child here
 
     void Awake()
     {
@@ -18,7 +20,6 @@ public class PlayerController : MonoBehaviour
 
     void Update()
     {
-        // Read movement input
         input = new Vector2(
             Input.GetAxisRaw("Horizontal"),
             Input.GetAxisRaw("Vertical")
@@ -26,15 +27,25 @@ public class PlayerController : MonoBehaviour
 
         if (input.sqrMagnitude > 1f)
             input.Normalize();
+
+        // FLIP SPRITE BASED ON X DIRECTION
+        if (input.x > 0.01f)
+        {
+            // moving right → flip
+            spriteTransform.localScale = new Vector3(-1, 1, 1);
+        }
+        else if (input.x < -0.01f)
+        {
+            // moving left → normal
+            spriteTransform.localScale = new Vector3(1, 1, 1);
+        }
     }
 
     void FixedUpdate()
     {
-        // Move the player
         Vector2 targetPos = rb.position + input * moveSpeed * Time.fixedDeltaTime;
         rb.MovePosition(targetPos);
 
-        // Rotate to face direction of movement
         if (input.sqrMagnitude > 0.01f)
         {
             float angle = Mathf.Atan2(input.y, input.x) * Mathf.Rad2Deg;
