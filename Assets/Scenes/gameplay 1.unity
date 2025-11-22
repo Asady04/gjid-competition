@@ -458,9 +458,9 @@ CircleCollider2D:
   m_IsTrigger: 1
   m_UsedByEffector: 0
   m_UsedByComposite: 0
-  m_Offset: {x: 0.048324466, y: 0.0043053627}
+  m_Offset: {x: 0, y: 0}
   serializedVersion: 2
-  m_Radius: 1.3835928
+  m_Radius: 0.5
 --- !u!212 &465827936
 SpriteRenderer:
   m_ObjectHideFlags: 0
@@ -802,9 +802,9 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 24.55664, y: -117.5777}
+  m_AnchoredPosition: {x: 24.55664, y: -152.61392}
   m_SizeDelta: {x: 12.4918, y: 350.3623}
-  m_Pivot: {x: 0.5, y: 0.1}
+  m_Pivot: {x: 0.5, y: 0}
 --- !u!114 &712242376
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -919,6 +919,7 @@ MonoBehaviour:
   arriveDistance: 1
   ignorePlayerCollisionAtStart: 1
   makeColliderTrigger: 0
+  isFollowing: 0
 --- !u!50 &735894268
 Rigidbody2D:
   serializedVersion: 4
@@ -1124,15 +1125,20 @@ MonoBehaviour:
   obstacleLayer:
     serializedVersion: 2
     m_Bits: 256
+  requireCompanion: 1
+  companionRadius: 1.5
+  companionTagFallback: 0
+  companionTagName: Companion
   bulletPrefab: {fileID: 5757767829620499918, guid: da3e41f3027a06f40af1b05d147a25e7, type: 3}
   muzzle: {fileID: 1672647588}
   bulletSpeed: 10
   fireCooldown: 1.5
   awareDelay: 0.8
   targetPredictAhead: 0
-  spriteTransform: {fileID: 761108496}
+  spriteRoot: {fileID: 0}
   originalFacesLeft: 1
-  flipThreshold: 0.01
+  flipSmoothSpeed: 720
+  animator: {fileID: 0}
 --- !u!50 &761108498
 Rigidbody2D:
   serializedVersion: 4
@@ -1222,6 +1228,7 @@ MonoBehaviour:
   arriveDistance: 1
   ignorePlayerCollisionAtStart: 1
   makeColliderTrigger: 0
+  isFollowing: 0
 --- !u!50 &845296156
 Rigidbody2D:
   serializedVersion: 4
@@ -1369,7 +1376,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &1026640035
 RectTransform:
   m_ObjectHideFlags: 0
@@ -1386,6 +1393,7 @@ RectTransform:
   - {fileID: 712242375}
   - {fileID: 1148161793}
   - {fileID: 1447496254}
+  - {fileID: 1196119963}
   m_Father: {fileID: 1066232818}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -1406,12 +1414,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   needle: {fileID: 712242375}
+  knob: {fileID: 1196119963}
   targetMarker: {fileID: 1447496255}
   infoText: {fileID: 1148161794}
-  maxRotation: 160
+  maxRotation: 260
   scrollSpeed: 100
   targetAngle: 35
   tolerance: 5
+  gizmoRadius: 200
   defaultColor: {r: 1, g: 1, b: 1, a: 1}
   targetColor: {r: 0, g: 1, b: 0, a: 1}
 --- !u!114 &1026640037
@@ -1849,6 +1859,81 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1148161792}
   m_CullTransparentMesh: 1
+--- !u!1 &1196119962
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1196119963}
+  - component: {fileID: 1196119965}
+  - component: {fileID: 1196119964}
+  m_Layer: 5
+  m_Name: Knob
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &1196119963
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1196119962}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1026640035}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 24.557, y: -152}
+  m_SizeDelta: {x: 279.3719, y: 300.77}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &1196119964
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1196119962}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 10913, guid: 0000000000000000f000000000000000, type: 0}
+  m_Type: 0
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!222 &1196119965
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1196119962}
+  m_CullTransparentMesh: 1
 --- !u!1 &1261328280
 GameObject:
   m_ObjectHideFlags: 0
@@ -2034,7 +2119,7 @@ RectTransform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1447496253}
-  m_LocalRotation: {x: 0, y: 0, z: -0.42327458, w: 0.90600145}
+  m_LocalRotation: {x: 0, y: 0, z: -0.3007058, w: 0.95371693}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -2043,8 +2128,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: -50.083}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 194, y: 26}
-  m_SizeDelta: {x: 12.4918, y: 228.0803}
+  m_AnchoredPosition: {x: 143, y: 13}
+  m_SizeDelta: {x: 13, y: 13}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1447496255
 MonoBehaviour:
@@ -2149,7 +2234,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 24, y: -44}
+  m_AnchoredPosition: {x: 24, y: -152}
   m_SizeDelta: {x: 535.3621, y: 525.5435}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1773636707
@@ -2266,6 +2351,7 @@ MonoBehaviour:
   arriveDistance: 1
   ignorePlayerCollisionAtStart: 1
   makeColliderTrigger: 0
+  isFollowing: 0
 --- !u!50 &1779762602
 Rigidbody2D:
   serializedVersion: 4
