@@ -1,80 +1,103 @@
 using UnityEngine;
 
+[RequireComponent(typeof(Collider2D))]
 public class Bullet : MonoBehaviour
 {
     [Header("Bullet")]
-    public float lifeTime = 5f;        // auto-destroy after this time
-    public int damage = 1;             // kept for compatibility if you later add HP
+    public float lifeTime = 5f;
+    public float minRaycastDistance = 0.01f; // small safety
 
     [Header("Collision")]
-    public LayerMask playerLayer;      // set to the Player layer(s)
-    public LayerMask obstacleLayer;    // set to walls/obstacles layer(s)
-    public bool useTagFallback = true; // if true, also accept GameObjects tagged "Player"
+    public LayerMask playerLayer;    // set this to your Player layer
+    public LayerMask obstacleLayer;  // set this to environment/walls
+    public bool useTagFallback = true;
+
+    Rigidbody2D rb;
+    Collider2D col;
+
+    void Awake()
+    {
+        rb = GetComponent<Rigidbody2D>();
+        col = GetComponent<Collider2D>();
+        if (col == null) Debug.LogWarning($"{name}: Bullet needs a Collider2D");
+    }
 
     void Start()
     {
         Destroy(gameObject, lifeTime);
     }
 
-    // Non-trigger collision (recommended: bullet collider NOT set as isTrigger)
     void OnCollisionEnter2D(Collision2D collision)
     {
+        // optional debug: Debug.Log($"Bullet collided (Collision): {collision.gameObject.name} layer={collision.gameObject.layer} tag={collision.gameObject.tag}");
         HandleHit(collision.collider);
     }
 
-    // Trigger collision (if you use trigger colliders)
     void OnTriggerEnter2D(Collider2D other)
     {
+        // optional debug: Debug.Log($"Bullet collided (Trigger): {other.gameObject.name} layer={other.gameObject.layer} tag={other.gameObject.tag}");
         HandleHit(other);
     }
 
-    void HandleHit(Collider2D col)
+    void FixedUpdate()
     {
-        if (col == null) return;
+        Vector2 currentPos = transform.position;
+        Vector2 moveDelta;
 
-        int colLayerBit = 1 << col.gameObject.layer;
-
-        // Hit player (by layer)
-        if ((playerLayer & colLayerBit) != 0)
+        if (rb != null)
         {
-            KillPlayer(col.gameObject);
-            Destroy(gameObject);
-            return;
+            moveDelta = rb.velocity * Time.fixedDeltaTime;
+        }
+        else
+        {
+            // If no rigidbody, assume transform movement
+            moveDelta = (Vector2)(transform.position - (Vector3)currentPos);
         }
 
-        // Fallback: Hit player by tag (if enabled)
-        if (useTagFallback && col.CompareTag("Player"))
-        {
-            KillPlayer(col.gameObject);
-            Destroy(gameObject);
-            return;
-        }
+        float dist = Mathf.Max(moveDelta.magnitude, minRaycastDistance);
+        if (dist <= 0f) return;
 
-        // Hit obstacle — destroy bullet
-        if ((obstacleLayer & colLayerBit) != 0)
-        {
-            // optional: spawn impact effect here
-            Destroy(gameObject);
-            return;
-        }
+        Vector2 dir = moveDelta.normalized;
+        LayerMask combined = playerLayer | obstacleLayer;
 
-        // default: destroy on any collision (safe)
-        Destroy(gameObject);
+        RaycastHit2D hit = Physics2D.Raycast(currentPos, dir, dist, combined);
+        if (hit.collider != null)
+        {
+            HandleHit(hit.collider);
+            if (this != null) Destroy(gameObject);
+        }
     }
 
-    void KillPlayer(GameObject playerObj)
+    void HandleHit(Collider2D target)
     {
-        // Instant kill: remove player object from scene
-        // You can replace this with any logic you want (disable, play death animation, etc.)
-        Destroy(playerObj);
+        if (target == null) return;
 
-        // If you prefer disabling instead of destroying:
-        // playerObj.SetActive(false);
+        int targetBit = 1 << target.gameObject.layer;
 
-        // If your player has a separate manager you want to notify, do it here:
-        // var mgr = FindObjectOfType<GameManager>();
-        // if (mgr != null) mgr.OnPlayerKilled();
+        // Player by layer
+        if ((playerLayer.value & targetBit) != 0)
+        {
+            Debug.Log("the player is dead");
+            Destroy(gameObject);
+            return;
+        }
 
-        // Optional: spawn death VFX or sound here
+        // Tag fallback
+        if (useTagFallback && target.CompareTag("Player"))
+        {
+            Debug.Log("the player is dead");
+            Destroy(gameObject);
+            return;
+        }
+
+        // obstacle
+        if ((obstacleLayer.value & targetBit) != 0)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        // default
+        Destroy(gameObject);
     }
 }
