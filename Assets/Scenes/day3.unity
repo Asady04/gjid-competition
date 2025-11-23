@@ -3071,6 +3071,7 @@ Transform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 --- !u!1 &1097337799
 GameObject:
   m_ObjectHideFlags: 0
@@ -3205,6 +3206,8 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1097337799}
   m_CullTransparentMesh: 1
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 =======
@@ -4079,6 +4082,7 @@ SpriteRenderer:
   m_SpriteSortPoint: 0
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 --- !u!1 &1466282460
 GameObject:
   m_ObjectHideFlags: 0
@@ -4213,6 +4217,8 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1466282460}
   m_CullTransparentMesh: 1
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 =======
@@ -4368,6 +4374,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 761108496}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+<<<<<<< Updated upstream
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
 --- !u!1 &1703729939
@@ -4823,6 +4830,8 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0, y: 0}
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 =======
