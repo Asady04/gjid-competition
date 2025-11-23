@@ -2162,8 +2162,8 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 10905, guid: 0000000000000000f000000000000000, type: 0}
-  m_Type: 1
+  m_Sprite: {fileID: 470408103, guid: 661dfb76f4e78914c85afcf6b5dad59e, type: 3}
+  m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
   m_FillMethod: 4
@@ -2287,8 +2287,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   knob: {fileID: 1276674789}
   menuText: {fileID: 572893538}
-  minAngle: 0
-  maxAngle: 120
+  minAngle: -90
+  maxAngle: 90
 --- !u!4 &1390625821
 Transform:
   m_ObjectHideFlags: 0
