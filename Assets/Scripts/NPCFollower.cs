@@ -38,11 +38,22 @@ public class NPCFollower : MonoBehaviour
     [Tooltip("Deadzone for horizontal movement before flipping (prevents jitter).")]
     public float flipDeadzone = 0.05f;
 
+    [Header("Animation smoothing (avoid jitter)")]
+    [Tooltip("Minimum speed (units/sec) considered walking; below this is idle.")]
+    public float animSpeedThreshold = 0.08f;
+    [Tooltip("How fast the displayed speed moves toward target (units/sec). Higher = more responsive.")]
+    public float animMaxSpeedDeltaPerSec = 6f;
+
     Rigidbody2D rb;
     PlayerPathRecorder recorder;
     Vector2 velocityRef = Vector2.zero;
     int spawnIndex = -1;
     static int counter = 0;
+    private bool hasTriggeredPickupObjective = false;
+
+    // animation smoothing internals
+    float targetAnimSpeed = 0f;
+    float displayedAnimSpeed = 0f;
 
     static bool globalFollow = false;
     public static void ToggleGlobalFollow(bool newState)
@@ -175,7 +186,8 @@ public class NPCFollower : MonoBehaviour
             velocityRef = Vector2.zero;
             rb.MovePosition(cur);
 
-            if (animator != null) animator.SetFloat(animSpeedParam, 0f);
+            // set targetAnimSpeed to zero (we will smooth to zero in Update)
+            targetAnimSpeed = 0f;
             return;
         }
 
@@ -188,8 +200,17 @@ public class NPCFollower : MonoBehaviour
         Vector2 move = newPos - cur;
         float speed = move.magnitude / Time.fixedDeltaTime;
 
-        if (animator != null)
-            animator.SetFloat(animSpeedParam, speed);
+        // compute a target animation speed with deadzone to avoid jitter
+        float currentSpeed = speed;
+        if (currentSpeed < animSpeedThreshold) currentSpeed = 0f;
+        targetAnimSpeed = currentSpeed;
+
+        // Objective flag: set once when this follower is following (first time)
+        if (isFollowing && !hasTriggeredPickupObjective)
+        {
+            GameGlobals.SetFlag("day1_picked_up_folks", true);
+            hasTriggeredPickupObjective = true;
+        }
 
         // --- flip using SpriteRenderer.flipX (instant and safe) ---
         if (flipUsingFlipX && spriteRenderer != null)
@@ -203,6 +224,18 @@ public class NPCFollower : MonoBehaviour
                 bool shouldFlip = originalFacesLeft ? movingRight : !movingRight;
                 spriteRenderer.flipX = shouldFlip;
             }
+        }
+    }
+
+    void Update()
+    {
+        // Smoothly move displayedAnimSpeed toward targetAnimSpeed and update animator here (runs per-frame)
+        float maxDelta = animMaxSpeedDeltaPerSec * Time.deltaTime;
+        displayedAnimSpeed = Mathf.MoveTowards(displayedAnimSpeed, targetAnimSpeed, maxDelta);
+
+        if (animator != null)
+        {
+            animator.SetFloat(animSpeedParam, displayedAnimSpeed);
         }
     }
 }

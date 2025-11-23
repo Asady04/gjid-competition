@@ -107,7 +107,7 @@ public class PlayerInteractorUI : MonoBehaviour
         if (!isFollowing && npcNearby)
         {
             shouldShow = true;
-            message = $"{interactKey.ToString().ToUpper()} follow me";
+            message = $"{interactKey.ToString().ToUpper()} pick up";
 
             // reset stopped timer (we only use it for "stay")
             stoppedTimer = 0f;
