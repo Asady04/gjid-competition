@@ -5,12 +5,10 @@ public class DoorController : MonoBehaviour
 {
     [Header("Door Settings")]
     public bool isOpen = false;
+    public bool isPermanentOpen = false;
 
     private Collider2D doorCollider;
     private SpriteRenderer spriteRenderer;
-
-    [Header("Player Settings")]
-    public string playerTag = "Player";  // pastikan Player punya tag "Player"
 
     void Awake()
     {
@@ -21,41 +19,46 @@ public class DoorController : MonoBehaviour
 
     public void SetOpen(bool state)
     {
+        if (isPermanentOpen)
+            return;
+
         isOpen = state;
         UpdateDoorState();
     }
 
-    void UpdateDoorState()
+    public void SetPermanentOpen()
     {
-        // Collider aktif hanya jika pintu tertutup
+        isPermanentOpen = true;
+        isOpen = true;
+        UpdateDoorState();
+    }
+
+    private void UpdateDoorState()
+    {
         doorCollider.enabled = !isOpen;
 
-        // Opsional: ubah transparansi supaya terlihat beda
         if (spriteRenderer != null)
         {
-            Color c = spriteRenderer.color;
+            var c = spriteRenderer.color;
             c.a = isOpen ? 0.4f : 1f;
             spriteRenderer.color = c;
         }
     }
 
-    // Ketika Player menabrak pintu tertutup → Player mati
-    void OnCollisionEnter2D(Collision2D collision)
+    private void OnCollisionEnter2D(Collision2D collision)
     {
-        if (!isOpen && collision.gameObject.CompareTag(playerTag))
+        if (!isOpen && collision.collider.CompareTag("Player"))
         {
-            //Destroy(collision.gameObject);
-            Debug.Log("[DoorController] Player died by colliding with closed door!");
+            Debug.Log("Player died by door");
         }
     }
 
-    // Jika pintu pakai trigger collider, gunakan ini
-    void OnTriggerEnter2D(Collider2D other)
+    private void OnTriggerEnter2D(Collider2D other)
     {
-        if (!isOpen && other.CompareTag(playerTag))
+        if (!isOpen && other.CompareTag("Player"))
         {
             Destroy(other.gameObject);
-            Debug.Log("[DoorController] Player died by entering closed door trigger!");
+            Debug.Log("Player died by trigger door");
         }
     }
 }
