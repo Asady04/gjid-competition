@@ -227,6 +227,17 @@ public class NPCFollower : MonoBehaviour
         }
     }
 
+    public void ResetFollowerState()
+{
+    isFollowing = false;
+    hasTriggeredPickupObjective = false;
+
+    // Reset animation smoothing / movement fields to avoid jumps
+    targetAnimSpeed = 0f;
+    displayedAnimSpeed = 0f;
+    velocityRef = Vector2.zero;
+}
+
     void Update()
     {
         // Smoothly move displayedAnimSpeed toward targetAnimSpeed and update animator here (runs per-frame)

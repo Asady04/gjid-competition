@@ -229,14 +229,12 @@ public class CutSceneController : MonoBehaviour
     IEnumerator WaitForAdvanceOrTimeout(float timeout)
     {
         float t = 0f;
-        bool advanced = false;
 
         while (t < timeout)
         {
             // advance by click or key
             if (clickToAdvance && (Input.GetMouseButtonDown(0) || Input.GetKeyDown(advanceKey)))
             {
-                advanced = true;
                 break;
             }
             // skip entire cutscene
