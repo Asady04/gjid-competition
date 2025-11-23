@@ -474,10 +474,8 @@ public class EnemyAI : MonoBehaviour
     {
         if (animator == null) return;
 
-        bool idle = velocity.sqrMagnitude < 0.001f;
-        animator.SetBool("Idle", idle);
-        animator.SetFloat("Horizontal", velocity.x);
-        animator.SetFloat("Vertical", velocity.y);
+        float speed = velocity.magnitude;
+        animator.SetFloat("Speed", speed);  
     }
 
     // draw gizmos for debugging
