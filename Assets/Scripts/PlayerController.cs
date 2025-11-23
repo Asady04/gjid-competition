@@ -11,11 +11,17 @@ public class PlayerController : MonoBehaviour
     private Rigidbody2D rb;
     private Vector2 input;
 
-    public Transform spriteTransform;   // <-- assign your sprite child here
+    public Transform spriteTransform;
+
+    [Header("Animation")]
+    public Animator animator;
+    public string animSpeedParam = "Speed";
 
     void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
+        if (animator == null)
+            animator = GetComponentInChildren<Animator>();
     }
 
     void Update()
@@ -28,17 +34,15 @@ public class PlayerController : MonoBehaviour
         if (input.sqrMagnitude > 1f)
             input.Normalize();
 
-        // FLIP SPRITE BASED ON X DIRECTION
+        // Set animation speed
+        if (animator != null)
+            animator.SetFloat(animSpeedParam, input.magnitude * moveSpeed);
+
+        // Flip sprite
         if (input.x > 0.01f)
-        {
-            // moving right → flip
             spriteTransform.localScale = new Vector3(-1, 1, 1);
-        }
         else if (input.x < -0.01f)
-        {
-            // moving left → normal
             spriteTransform.localScale = new Vector3(1, 1, 1);
-        }
     }
 
     void FixedUpdate()
