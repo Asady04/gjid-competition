@@ -1,6 +1,7 @@
 using UnityEngine;
 using TMPro;
 using UnityEngine.UI;
+using System.Collections;
 
 public class RadioPuzzleController : MonoBehaviour
 {
@@ -9,7 +10,7 @@ public class RadioPuzzleController : MonoBehaviour
     public RectTransform knob;
     public Image targetMarker;
     public TMP_Text infoText;
-    public Button closeButton; // tombol untuk menutup setelah solved
+    public Button closeButton;
 
     [Header("Rotation Settings")]
     public float maxRotation = 260f;
@@ -18,6 +19,15 @@ public class RadioPuzzleController : MonoBehaviour
     [Header("Target Frequency")]
     public float targetAngle = 35f;
     public float tolerance = 5f;
+
+    [Header("Mission UI")]
+    public TMP_Text missionText;
+    public float missionDuration = 10f;
+
+    [Header("Enemy Reaction")]
+    public EnemyAI[] assignedEnemies;
+    public Transform radioTarget;
+    public float enemyStayDuration = 10f;
 
     [Header("Gizmos Settings")]
     public float gizmoRadius = 150f;
@@ -45,9 +55,11 @@ public class RadioPuzzleController : MonoBehaviour
         if (infoText != null)
             infoText.text = "Scroll untuk mencari sinyal...";
 
-        // button disembunyikan saat puzzle dimulai
         if (closeButton != null)
             closeButton.gameObject.SetActive(false);
+
+        if (missionText != null)
+            missionText.gameObject.SetActive(false);
     }
 
     void Update()
@@ -103,13 +115,11 @@ public class RadioPuzzleController : MonoBehaviour
             if (targetMarker != null)
                 targetMarker.color = targetColor;
 
-            var door = FindObjectOfType<DoorController>();
-            if (door != null)
-                door.SetOpen(true);
-
-            // tampilkan tombol Close setelah puzzle selesai
             if (closeButton != null)
                 closeButton.gameObject.SetActive(true);
+
+            TriggerEnemyToRadio();
+            StartMissionTimer();
         }
         else
         {
@@ -118,12 +128,48 @@ public class RadioPuzzleController : MonoBehaviour
         }
     }
 
+    void TriggerEnemyToRadio()
+    {
+        if (assignedEnemies == null || assignedEnemies.Length == 0) return;
+        if (radioTarget == null) return;
+
+        foreach (var enemy in assignedEnemies)
+        {
+            if (enemy == null) continue;
+
+            EnemyCommander commander = enemy.GetComponent<EnemyCommander>();
+            if (commander != null)
+                commander.InvestigateRadio(radioTarget.position, enemyStayDuration);
+        }
+    }
+
+    void StartMissionTimer()
+    {
+        if (missionText == null) return;
+
+        missionText.gameObject.SetActive(true);
+        StartCoroutine(MissionTimer());
+    }
+
+    private IEnumerator MissionTimer()
+    {
+        float timer = missionDuration;
+
+        while (timer > 0f)
+        {
+            missionText.text = "Selamatkan semuanya dalam " + Mathf.Ceil(timer) + " detik!";
+            timer -= Time.deltaTime;
+            yield return null;
+        }
+
+        missionText.gameObject.SetActive(false);
+    }
+
     public void ClosePuzzle()
     {
         solved = false;
         gameObject.SetActive(false);
         Time.timeScale = 1f;
-        Cursor.visible = false;
     }
 
     void OnDrawGizmos()
