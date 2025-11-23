@@ -2202,6 +2202,11 @@ MonoBehaviour:
   scrollSpeed: 100
   targetAngle: 35
   tolerance: 5
+  missionText: {fileID: 0}
+  missionDuration: 10
+  assignedEnemies: []
+  radioTarget: {fileID: 0}
+  enemyStayDuration: 10
   gizmoRadius: 200
   defaultColor: {r: 1, g: 1, b: 1, a: 1}
   targetColor: {r: 0, g: 1, b: 0, a: 1}
