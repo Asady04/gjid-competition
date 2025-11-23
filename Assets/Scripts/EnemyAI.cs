@@ -31,9 +31,10 @@ public class EnemyAI : MonoBehaviour
     public string companionTagName = "Companion";
 
     [Header("Shooting")]
-    public GameObject bulletPrefab;
-    public Transform muzzle;
-    public float bulletSpeed = 10f;
+    public GameObject bulletPrefab;      // assign prefab with Bullet.cs on it
+    public Transform muzzle;             // assign muzzle transform (can be child)
+    public float bulletSpeed = 12f;
+    public float muzzleOffset = 0.25f;   // small forward offset so spawn is slightly ahead
     public float fireCooldown = 1.5f;
     public float awareDelay = 0.8f;
     public float targetPredictAhead = 0f;
@@ -324,39 +325,50 @@ public class EnemyAI : MonoBehaviour
         StartCoroutine(ResetCanShoot());
     }
 
-    void FireAt(Vector2 targetPos)
+    public void FireAt(Vector2 targetPosition)
     {
-        if (bulletPrefab == null || muzzle == null) return;
-
-        Vector2 origin = muzzle.position;
-        Vector2 dir = (targetPos - origin).normalized;
-
-        if (targetPredictAhead != 0f && player != null)
+        if (bulletPrefab == null)
         {
-            Rigidbody2D prb = player.GetComponent<Rigidbody2D>();
-            if (prb != null)
+            Debug.LogWarning("[EnemyAI] bulletPrefab is not assigned.");
+            return;
+        }
+
+        if (muzzle == null)
+        {
+            Debug.LogWarning("[EnemyAI] muzzle is not assigned. Using enemy transform.");
+        }
+
+        Vector2 origin = (muzzle != null) ? (Vector2)muzzle.position : (Vector2)transform.position;
+        Vector2 dir = (targetPosition - origin);
+        if (dir.sqrMagnitude <= 0.0001f)
+        {
+            Debug.LogWarning("[EnemyAI] FireAt called with zero direction.");
+            dir = transform.right; // fallback
+        }
+        dir.Normalize();
+
+        // spawn a bit forward from the muzzle to reduce overlap with shooter
+        Vector2 spawnPos = origin + dir * muzzleOffset;
+
+        GameObject b = Instantiate(bulletPrefab, spawnPos, Quaternion.FromToRotation(Vector3.right, dir));
+        Bullet bulletComp = b.GetComponent<Bullet>();
+        if (bulletComp != null)
+        {
+            // set the owner so bullet can ignore shooter colliders and know who fired it
+            bulletComp.Initialize(dir * bulletSpeed, this.gameObject);
+
+            // Make sure bullet layer masks are configured in inspector (playerLayer/obstacleLayer)
+            // Optionally set bullet damage here:
+            // bulletComp.damage = 15f;
+        }
+        else
+        {
+            // if the prefab doesn't have Bullet, try setting RB velocity directly
+            var rb = b.GetComponent<Rigidbody2D>();
+            if (rb != null)
             {
-                Vector2 lead = prb.velocity * targetPredictAhead;
-                dir = ((Vector2)player.position + lead - origin).normalized;
+                rb.velocity = dir * bulletSpeed;
             }
-        }
-
-        GameObject b = Instantiate(bulletPrefab, origin, Quaternion.FromToRotation(Vector3.right, dir));
-
-        // ignore immediate collision with spawner
-        Collider2D enemyCol = GetComponent<Collider2D>();
-        Collider2D bulletCol = b.GetComponent<Collider2D>() ?? b.GetComponentInChildren<Collider2D>();
-        if (bulletCol != null && enemyCol != null)
-        {
-            Physics2D.IgnoreCollision(bulletCol, enemyCol, true);
-        }
-
-        Rigidbody2D brb = b.GetComponent<Rigidbody2D>();
-        if (brb != null)
-        {
-            brb.velocity = dir * bulletSpeed;
-            brb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
-            brb.gravityScale = 0f;
         }
     }
 
@@ -475,7 +487,7 @@ public class EnemyAI : MonoBehaviour
         if (animator == null) return;
 
         float speed = velocity.magnitude;
-        animator.SetFloat("Speed", speed);  
+        animator.SetFloat("Speed", speed);
     }
 
     // draw gizmos for debugging
