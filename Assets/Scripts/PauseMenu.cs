@@ -62,8 +62,6 @@ public class PauseMenu : MonoBehaviour
 
     void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
-        // whenever a new scene loads, guarantee the pause UI is closed and time is normal
-        // this prevents the panel from remaining open when you re-enter gameplay
         EnsurePanelClosed();
 
         // make sure gameplay runs normally

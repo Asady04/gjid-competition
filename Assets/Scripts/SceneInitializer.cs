@@ -1,12 +1,6 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-/// <summary>
-/// SceneInitializer: resets transient game state when a scene loads.
-/// - Clears GameGlobals flags
-/// - Resets NPCFollower global follow and per-follower state
-/// - Resets ObjectiveManager objectives
-/// </summary>
 public class SceneInitializer : MonoBehaviour
 {
     [Tooltip("Optional: only reset when loading scenes whose name contains this substring. Leave empty to always reset.")]

@@ -204,7 +204,6 @@ public class ObjectiveManager : MonoBehaviour
         return true;
     }
 
-    // Optional helper to allow other scripts to mark an objective by name
     public bool CompleteByFlagName(string flagName)
     {
         foreach (var o in objectives)
