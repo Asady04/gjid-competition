@@ -8,8 +8,8 @@ public class KnobMenu : MonoBehaviour
     public TMP_Text menuText;
 
     [Header("Knob Settings")]
-    public float minAngle = 0f;
-    public float maxAngle = 180f;
+    public float minAngle = -90f;
+    public float maxAngle = 90f;
 
     private float currentAngle = 0f;
     private int menuIndex = 0;
@@ -29,31 +29,29 @@ public class KnobMenu : MonoBehaviour
     }
 
     private void Update()
-{
-    float scroll = Input.GetAxis("Mouse ScrollWheel");
-
-    if (scroll != 0)
     {
-        if (scroll > 0)
-            menuIndex--;
-        else
-            menuIndex++;
+        float scroll = Input.GetAxis("Mouse ScrollWheel");
 
-        // === Looping Index ===
-        if (menuIndex < 0)
-            menuIndex = menuNames.Length - 1;
-        else if (menuIndex > menuNames.Length - 1)
-            menuIndex = 0;
+        if (scroll != 0)
+        {
+            if (scroll > 0)
+                menuIndex--;
+            else
+                menuIndex++;
 
-        // Update rotation
-        currentAngle = Mathf.Lerp(minAngle, maxAngle,
-            (float)menuIndex / (menuNames.Length - 1));
+            if (menuIndex < 0)
+                menuIndex = menuNames.Length - 1;
+            else if (menuIndex > menuNames.Length - 1)
+                menuIndex = 0;
 
-        knob.rotation = Quaternion.Euler(0, 0, currentAngle);
+            currentAngle = Mathf.Lerp(minAngle, maxAngle,
+                (float)menuIndex / (menuNames.Length - 1));
 
-        UpdateMenu();
+            knob.rotation = Quaternion.Euler(0, 0, -currentAngle);
+
+            UpdateMenu();
+        }
     }
-}
 
     void UpdateMenu()
     {
