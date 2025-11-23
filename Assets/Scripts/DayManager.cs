@@ -3,7 +3,14 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using UnityEngine.Events;
+using UnityEngine.SceneManagement;
 
+/// <summary>
+/// DayManager (patched):
+/// - Keeps original behavior but also listens to SceneManager.sceneLoaded so it
+///   will auto-start the banner each time the scene containing this GameObject loads.
+/// - Prevents overlapping runs and resets UI state before playing.
+/// </summary>
 public class DayManager : MonoBehaviour
 {
     [Header("Day banner UI")]
@@ -32,23 +39,97 @@ public class DayManager : MonoBehaviour
     public UnityEvent onDayBannerFinished;
     public UnityEvent onObjectiveShown;
 
-    // Public wrapper to start the sequence from other scripts
-    public void StartDay()
+    // internal
+    Coroutine runningCoroutine = null;
+
+    void Awake()
     {
-        StartCoroutine(RunDaySequence());
+        // Ensure panel exists and in an initial state (hidden) even before Start
+        PrepareUIInitialState();
+    }
+
+    private void OnEnable()
+    {
+        // subscribe so we know when scenes load
+        SceneManager.sceneLoaded += OnSceneLoaded;
+    }
+
+    private void OnDisable()
+    {
+        SceneManager.sceneLoaded -= OnSceneLoaded;
     }
 
     private void Start()
     {
-        // ensure UI is prepared
-        if (dayPanelCanvasGroup != null)
-            dayPanelCanvasGroup.gameObject.SetActive(true);
-
+        // Do original Start duties: set text and optionally auto-run first time.
         if (dayText != null)
             dayText.text = dayLabel;
 
         if (autoStart)
+        {
+            // Use StartCoroutine with a tiny delay to let other scene initialization finish
+            StartCoroutine(DelayedAutoStart());
+        }
+    }
+
+    IEnumerator DelayedAutoStart()
+    {
+        // wait one frame so other Awake/Start code runs first
+        yield return null;
+
+        // Avoid starting if another run is already active
+        if (runningCoroutine == null)
             StartDay();
+    }
+
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        // When a scene is loaded, if this GameObject belongs to the active scene
+        // and autoStart is enabled, start the day banner again.
+        // This handles the "go to main menu and come back" case.
+        if (!autoStart) return;
+
+        // Only start if this GameObject's scene matches the loaded scene
+        if (gameObject.scene != scene) return;
+
+        // small delay to allow scene initialization
+        StartCoroutine(StartOnSceneLoadDelay());
+    }
+
+    IEnumerator StartOnSceneLoadDelay()
+    {
+        yield return null; // wait one frame
+        if (runningCoroutine == null)
+            StartDay();
+    }
+
+    // Public wrapper to start the sequence from other scripts
+    public void StartDay()
+    {
+        if (runningCoroutine != null)
+        {
+            // already running; ignore
+            return;
+        }
+        runningCoroutine = StartCoroutine(RunDaySequence());
+    }
+
+    void PrepareUIInitialState()
+    {
+        // Ensure the CanvasGroup is active and hidden so we can fade in properly.
+        if (dayPanelCanvasGroup != null)
+        {
+            dayPanelCanvasGroup.gameObject.SetActive(true);
+            dayPanelCanvasGroup.alpha = 0f;
+        }
+
+        if (dayText != null)
+        {
+            dayText.text = dayLabel;
+            Color tc = dayText.color;
+            tc.a = 0f;
+            dayText.color = tc;
+        }
     }
 
     public IEnumerator RunDaySequence()
@@ -56,18 +137,19 @@ public class DayManager : MonoBehaviour
         if (dayPanelCanvasGroup == null)
         {
             Debug.LogError("DayManager: dayPanelCanvasGroup not assigned.");
+            runningCoroutine = null;
             yield break;
         }
 
-        // Prepare day text alpha (TextMeshPro) if available
+        // reset UI state at start (important if run multiple times)
         if (dayText != null)
         {
             Color tc = dayText.color;
             tc.a = 0f;
             dayText.color = tc;
+            dayText.text = dayLabel;
         }
 
-        // Ensure panel starts transparent
         dayPanelCanvasGroup.alpha = 0f;
         dayPanelCanvasGroup.gameObject.SetActive(true);
 
@@ -96,11 +178,12 @@ public class DayManager : MonoBehaviour
         // Start ObjectiveManager if assigned
         if (objectiveManager != null)
         {
-            // Call Begin() to show objective UI and start tracking
             objectiveManager.Begin();
             onObjectiveShown?.Invoke();
         }
 
+        // finished
+        runningCoroutine = null;
         yield break;
     }
 

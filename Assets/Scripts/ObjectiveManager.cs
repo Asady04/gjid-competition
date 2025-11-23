@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using TMPro;
 using UnityEngine.Events;
+using UnityEngine.SceneManagement;
 
 [System.Serializable]
 public class SimpleObjectiveEntry
@@ -36,18 +37,62 @@ public class ObjectiveManager : MonoBehaviour
     [Header("Behavior")]
     public bool autoStart = true;
     public bool hidePanelWhenAllDone = false;
-    public float pollingInterval = 0.25f;
+    public float pollingInterval = 0.25f; // seconds (uses unscaled waiting now)
 
     [Header("Events")]
     public UnityEvent onAllComplete;
 
+    // runtime
     bool running = false;
+    Coroutine pollCoroutine = null;
+
+    void Awake()
+    {
+        // ensure UI initial state (hidden if not autoStart)
+        if (objectivePanel != null)
+            objectivePanel.SetActive(autoStart);
+        RefreshUI();
+    }
+
+    void OnEnable()
+    {
+        SceneManager.sceneLoaded += OnSceneLoaded;
+    }
+
+    void OnDisable()
+    {
+        SceneManager.sceneLoaded -= OnSceneLoaded;
+    }
 
     void Start()
     {
-        RefreshUI();
-        if (objectivePanel != null) objectivePanel.SetActive(autoStart);
-        if (autoStart) Begin();
+        // preserve original behavior: auto start on first scene entry
+        if (autoStart)
+        {
+            // slight delay to allow scene initialization
+            StartCoroutine(DelayedBeginOneFrame());
+        }
+    }
+
+    IEnumerator DelayedBeginOneFrame()
+    {
+        yield return null;
+        if (!running) Begin();
+    }
+
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        // If this object belongs to the scene that was just loaded and autoStart is true,
+        // ensure the objective panel is set and Begin() is called.
+        if (!autoStart) return;
+        if (gameObject.scene != scene) return;
+
+        // ensure panel shows the correct initial state
+        if (objectivePanel != null)
+            objectivePanel.SetActive(true);
+
+        // small delay to allow other initialization
+        StartCoroutine(DelayedBeginOneFrame());
     }
 
     public void Begin()
@@ -55,17 +100,22 @@ public class ObjectiveManager : MonoBehaviour
         if (running) return;
         running = true;
         if (objectivePanel != null) objectivePanel.SetActive(true);
-        StartCoroutine(PollRoutine());
         RefreshUI();
+        pollCoroutine = StartCoroutine(PollRoutineUnscaled());
     }
 
     public void Stop()
     {
         running = false;
-        StopAllCoroutines();
+        if (pollCoroutine != null)
+        {
+            StopCoroutine(pollCoroutine);
+            pollCoroutine = null;
+        }
     }
 
-    IEnumerator PollRoutine()
+    // Use unscaled waits so polling continues even if Time.timeScale == 0 during transitions
+    IEnumerator PollRoutineUnscaled()
     {
         while (running)
         {
@@ -73,10 +123,9 @@ public class ObjectiveManager : MonoBehaviour
             for (int i = 0; i < objectives.Count; i++)
             {
                 var o = objectives[i];
-                // skip already completed
+                if (o == null) continue;
                 if (o.completed) continue;
 
-                // check global flag
                 if (!string.IsNullOrEmpty(o.globalFlagName) && GameGlobals.GetFlag(o.globalFlagName))
                 {
                     MarkComplete(o);
@@ -89,52 +138,59 @@ public class ObjectiveManager : MonoBehaviour
                 running = false;
                 onAllComplete?.Invoke();
                 if (hidePanelWhenAllDone && objectivePanel != null) objectivePanel.SetActive(false);
+                pollCoroutine = null;
                 yield break;
             }
 
             if (anyNew) RefreshUI();
-            yield return new WaitForSeconds(pollingInterval);
+
+            // wait unscaled so pause/scene transitions don't stop objective checks
+            float elapsed = 0f;
+            while (elapsed < pollingInterval)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                yield return null;
+            }
         }
+        pollCoroutine = null;
     }
 
     void MarkComplete(SimpleObjectiveEntry o)
     {
+        if (o == null) return;
         o.completed = true;
         o.completedAt = Time.time;
 
-        // update per-object TMP if present
         if (o.perObjectiveTMP != null)
         {
-            o.perObjectiveTMP.fontStyle |= FontStyles.Strikethrough;
-            // optionally change color or add a checkmark here
+            o.perObjectiveTMP.fontStyle |= TMPro.FontStyles.Strikethrough;
         }
 
-        // fire event
         o.onComplete?.Invoke();
     }
 
     void RefreshUI()
     {
-        // update per-object TMPs
         foreach (var o in objectives)
         {
+            if (o == null) continue;
             if (o.perObjectiveTMP != null)
             {
                 o.perObjectiveTMP.text = o.description;
-                if (o.completed) o.perObjectiveTMP.fontStyle |= FontStyles.Strikethrough;
-                else o.perObjectiveTMP.fontStyle &= ~FontStyles.Strikethrough;
+                if (o.completed) o.perObjectiveTMP.fontStyle |= TMPro.FontStyles.Strikethrough;
+                else o.perObjectiveTMP.fontStyle &= ~TMPro.FontStyles.Strikethrough;
             }
         }
 
-        // update combined text
         if (combinedListTMP != null)
         {
             System.Text.StringBuilder sb = new System.Text.StringBuilder();
             for (int i = 0; i < objectives.Count; i++)
             {
                 var o = objectives[i];
+                if (o == null) continue;
                 if (o.completed)
-                    sb.AppendLine("<s>" + o.description + "</s>"); // use TMP rich text for combined field
+                    sb.AppendLine("<s>" + o.description + "</s>");
                 else
                     sb.AppendLine(o.description);
             }
@@ -148,24 +204,12 @@ public class ObjectiveManager : MonoBehaviour
         return true;
     }
 
-#if UNITY_EDITOR
-    void OnDrawGizmosSelected()
-    {
-        if (player == null) return;
-        Gizmos.color = Color.cyan;
-        foreach (var o in objectives)
-        {
-            if (o == null) continue;
-            // If you want per-object radius gizmos add a radius field to entry and draw it here.
-        }
-    }
-#endif
-
     // Optional helper to allow other scripts to mark an objective by name
     public bool CompleteByFlagName(string flagName)
     {
         foreach (var o in objectives)
         {
+            if (o == null) continue;
             if (o.globalFlagName == flagName)
             {
                 if (!o.completed) MarkComplete(o);
@@ -175,4 +219,26 @@ public class ObjectiveManager : MonoBehaviour
         }
         return false;
     }
+    public void ResetAllObjectives()
+    {
+        if (objectives == null) return;
+        foreach (var o in objectives)
+        {
+            if (o == null) continue;
+            o.completed = false;
+            o.completedAt = 0f;
+            if (o.perObjectiveTMP != null)
+            {
+                // remove strikethrough if applied
+                o.perObjectiveTMP.fontStyle &= ~TMPro.FontStyles.Strikethrough;
+                o.perObjectiveTMP.text = o.description;
+            }
+        }
+        RefreshUI();
+        // stop any running poll and mark not running — Begin() will start fresh if needed
+        Stop();
+        // Show the panel ready for a new run if appropriate
+        if (objectivePanel != null) objectivePanel.SetActive(true);
+    }
 }
+
