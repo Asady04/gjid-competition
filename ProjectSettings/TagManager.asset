@@ -42,3 +42,9 @@ TagManager:
   - name: Default
     uniqueID: 0
     locked: 0
+  - name: Ground
+    uniqueID: 1598148083
+    locked: 0
+  - name: Fence
+    uniqueID: 4035549573
+    locked: 0

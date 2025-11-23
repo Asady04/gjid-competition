@@ -1,5 +1,5 @@
 fileFormatVersion: 2
-guid: f7b93d0e86ff68843b154173bb1d640f
+guid: 70911599a21fcfb44bc326ee0d88fde5
 TextureImporter:
   internalIDToNameTable: []
   externalObjects: {}
@@ -136,12 +136,12 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: npcwalk1_0
+      name: npcidle2-sheet_0
       rect:
         serializedVersion: 2
-        x: 24
+        x: 22
         y: 0
-        width: 29
+        width: 31
         height: 72
       alignment: 0
       pivot: {x: 0, y: 0}
@@ -150,14 +150,14 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: fb9956e9169405548b9f0c64ec72264e
-      internalID: -709516380
+      spriteID: cde9cd9fd2166a3498d8c13369afd88a
+      internalID: 296588962
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: npcwalk1_1
+      name: npcidle2-sheet_1
       rect:
         serializedVersion: 2
         x: 94
@@ -171,50 +171,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: ead98e3bc58aeaf429715b9f2b3d5a3e
-      internalID: 554864098
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: npcwalk1_2
-      rect:
-        serializedVersion: 2
-        x: 168
-        y: 0
-        width: 29
-        height: 72
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      outline: []
-      physicsShape: []
-      tessellationDetail: 0
-      bones: []
-      spriteID: 78780dcc5800fdc44a9b63ecf9d4663d
-      internalID: -655791387
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: npcwalk1_3
-      rect:
-        serializedVersion: 2
-        x: 238
-        y: 0
-        width: 31
-        height: 72
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      outline: []
-      physicsShape: []
-      tessellationDetail: 0
-      bones: []
-      spriteID: 28c9f8fd30c1e254f9dc7ebec6859491
-      internalID: 1980108158
+      spriteID: 230826ff66b86f2489101b287226b2e7
+      internalID: -2122502349
       vertices: []
       indices: 
       edges: []
@@ -230,10 +188,8 @@ TextureImporter:
     weights: []
     secondaryTextures: []
     nameFileIdTable:
-      npcwalk1_0: -709516380
-      npcwalk1_1: 554864098
-      npcwalk1_2: -655791387
-      npcwalk1_3: 1980108158
+      npcidle2-sheet_0: 296588962
+      npcidle2-sheet_1: -2122502349
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
