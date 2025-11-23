@@ -9,6 +9,7 @@ public class RadioPuzzleController : MonoBehaviour
     public RectTransform knob;
     public Image targetMarker;
     public TMP_Text infoText;
+    public Button closeButton; // tombol untuk menutup setelah solved
 
     [Header("Rotation Settings")]
     public float maxRotation = 260f;
@@ -43,28 +44,30 @@ public class RadioPuzzleController : MonoBehaviour
 
         if (infoText != null)
             infoText.text = "Scroll untuk mencari sinyal...";
+
+        // button disembunyikan saat puzzle dimulai
+        if (closeButton != null)
+            closeButton.gameObject.SetActive(false);
     }
 
     void Update()
     {
-        if (solved) return;
-
-        float scroll = Input.GetAxis("Mouse ScrollWheel");
-
-        if (Mathf.Abs(scroll) > 0.001f)
+        if (!solved)
         {
-            isScrolling = true;
-            currentAngle = Mathf.Clamp(
-                currentAngle + scroll * scrollSpeed,
-                -maxRotation / 2f,
-                maxRotation / 2f
-            );
+            float scroll = Input.GetAxis("Mouse ScrollWheel");
 
-            UpdateNeedle();
-        }
-        else
-        {
-            if (isScrolling)
+            if (Mathf.Abs(scroll) > 0.001f)
+            {
+                isScrolling = true;
+                currentAngle = Mathf.Clamp(
+                    currentAngle + scroll * scrollSpeed,
+                    -maxRotation / 2f,
+                    maxRotation / 2f
+                );
+
+                UpdateNeedle();
+            }
+            else if (isScrolling)
             {
                 isScrolling = false;
                 CheckIfSolved();
@@ -82,7 +85,6 @@ public class RadioPuzzleController : MonoBehaviour
         if (needle != null)
             needle.localRotation = Quaternion.Euler(0f, 0f, -currentAngle);
 
-        // Knob ikut berputar mengikuti needle
         if (knob != null)
             knob.localRotation = Quaternion.Euler(0f, 0f, -currentAngle);
     }
@@ -105,7 +107,9 @@ public class RadioPuzzleController : MonoBehaviour
             if (door != null)
                 door.SetOpen(true);
 
-            Invoke(nameof(ClosePuzzle), 1.5f);
+            // tampilkan tombol Close setelah puzzle selesai
+            if (closeButton != null)
+                closeButton.gameObject.SetActive(true);
         }
         else
         {
@@ -114,14 +118,14 @@ public class RadioPuzzleController : MonoBehaviour
         }
     }
 
-    void ClosePuzzle()
+    public void ClosePuzzle()
     {
+        solved = false;
         gameObject.SetActive(false);
         Time.timeScale = 1f;
         Cursor.visible = false;
     }
 
-    // Gizmos panduan target tidak bergerak mengikuti needle
     void OnDrawGizmos()
     {
         if (needle == null) return;

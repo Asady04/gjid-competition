@@ -17,7 +17,7 @@ public class KnobMenu : MonoBehaviour
     private string[] menuNames =
     {
         "Play",
-        "Settings",
+        "Setting",
         "Credit",
         "Exit"
     };
